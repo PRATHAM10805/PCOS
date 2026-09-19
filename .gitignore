@@ -1,0 +1,104 @@
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# =========================
+# Virtual Environments
+# =========================
+.venv/
+venv/
+env/
+ENV/
+
+# =========================
+# Dataset
+# =========================
+# Do not upload the original dataset
+data/*.csv
+data/*.xlsx
+data/*.xls
+
+# =========================
+# Trained Models
+# =========================
+models/*.pkl
+models/*.joblib
+models/*.model
+
+# =========================
+# Generated Results
+# =========================
+results/*.json
+results/*.csv
+results/*.pkl
+results/*.joblib
+
+# Keep selected visual results if desired
+!results/shap_summary.png
+
+# =========================
+# Jupyter Notebook
+# =========================
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# =========================
+# VS Code
+# =========================
+.vscode/
+
+# =========================
+# PyCharm / IntelliJ
+# =========================
+.idea/
+
+# =========================
+# Environment Variables
+# =========================
+.env
+.env.*
+!.env.example
+
+# =========================
+# OS Files
+# =========================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# =========================
+# Python Packaging
+# =========================
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# =========================
+# Logs / Temporary Files
+# =========================
+*.log
+*.tmp
+*.temp
+
+# =========================
+# Coverage / Testing
+# =========================
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# =========================
+# Secrets
+# =========================
+*.pem
+*.key
+secrets.json
+credentials.json
