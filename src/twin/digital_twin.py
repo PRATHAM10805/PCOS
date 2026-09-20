@@ -1,198 +1,171 @@
 from dataclasses import dataclass, field
-from typing import Any, Optional
-
+from typing import Any
+from src.twin.scenarios import ScenarioSimulator
+from src.HPO.baseline_simulation import run_baseline_simulation
 from src.HPO.patient_values import HPOPatientValues
-from src.HPO.parameters import HPOParameters
-from src.twin.parameter_mapping import create_mapping
 from src.twin.personalization import (
+    PatientProfile,
     create_patient_profile,
 )
+from src.twin.parameter_mapping import PatientTwinMapping
+
 
 @dataclass
 class DigitalTwinState:
-    """
-    Current computational state of a patient's digital twin.
-
-    The physiological state will be populated once a validated
-    HPO model is connected.
-    """
-
-    baseline: Optional[Any] = None
-
-    scenarios: dict[str, Any] = field(
-        default_factory=dict
-    )
+    baseline: Any = None
+    scenarios: dict[str, Any] = field(default_factory=dict)
 
 
 class PatientDigitalTwin:
     """
-    Computational representation of one patient.
+    Patient-specific digital twin.
 
     The twin combines:
-        1. Patient observations
-        2. Personalized model parameters
-        3. Physiological model state
-        4. Scenario states
-
-    The HPO simulation is intentionally not executed until
-    a validated physiological model is connected.
+    1. Clinical observations
+    2. Patient-specific representation
+    3. Röblitz HPO baseline simulation
+    4. Future what-if simulations
     """
 
-    def __init__(
-        self,
-        patient: HPOPatientValues,
-    ):
+    def __init__(self, patient: HPOPatientValues):
         self.patient = patient
-
-        self.profile = create_patient_profile(
-        patient
-        )
-        
-        self.mapping = create_mapping(
-            patient
-        )
-
-        self.parameters: HPOParameters = (
-            self.mapping["parameters"]
-        )
+        self.scenario_simulator = ScenarioSimulator()
+        self.profile: PatientProfile = create_patient_profile(patient)
+        self.mapping: PatientTwinMapping = self.profile.mapping
 
         self.state = DigitalTwinState()
 
-        self.hpo_model = None
+        self.ml_assessment = None
 
-    # ---------------------------------------------------------
-    # Model connection
-    # ---------------------------------------------------------
-
-    def attach_hpo_model(self, model):
+        self.status = "initialized"
+    def compare_baseline_scenario(self, scenario_name: str):
         """
-        Attach a validated HPO model to the twin.
-        """
+        Compare a stored scenario against the baseline simulation.
 
-        self.hpo_model = model
-
-    # ---------------------------------------------------------
-    # Status
-    # ---------------------------------------------------------
-
-    def get_status(self):
-        """
-        Return the current readiness status of the twin.
+        Returns summary statistics for every common model variable.
         """
 
-        return {
-            "patient_id": self.patient.patient_id,
-
-            "observations_available": (
-                self.patient is not None
-            ),
-
-            "parameters_available": (
-                self.parameters is not None
-            ),
-
-            "hpo_model_available": (
-                self.hpo_model is not None
-            ),
-
-            "baseline_simulation_available": (
-                self.state.baseline is not None
-            ),
-
-            "scenario_count": len(
-                self.state.scenarios
-            ),
-        }
-
-    # ---------------------------------------------------------
-    # Baseline simulation
-    # ---------------------------------------------------------
-
-    def simulate_baseline(
-        self,
-        *args,
-        **kwargs,
-    ):
-        """
-        Run the baseline physiological simulation.
-
-        This method remains unavailable until an HPO model
-        has been attached.
-        """
-
-        if self.hpo_model is None:
+        if self.state.baseline is None:
             raise RuntimeError(
-                "No HPO model is attached to the "
-                "digital twin."
+                "Baseline simulation must be run before comparison."
             )
 
-        result = self.hpo_model.simulate(
-            patient=self.patient,
-            parameters=self.parameters,
-            *args,
-            **kwargs,
-        )
+        if scenario_name not in self.state.scenarios:
+            raise ValueError(
+                f"Scenario '{scenario_name}' does not exist."
+            )
 
-        self.state.baseline = result
+        baseline_result = self.state.baseline.result
+        scenario_result = self.state.scenarios[scenario_name].result
 
-        return result
+        if baseline_result.shape != scenario_result.shape:
+            raise ValueError(
+                "Baseline and scenario trajectories have different shapes."
+            )
 
-    # ---------------------------------------------------------
-    # Scenario
-    # ---------------------------------------------------------
+        comparison = {}
 
-    def add_scenario(
+        for column in baseline_result.colnames:
+            if column == "time":
+                continue
+
+            baseline_values = baseline_result[column]
+            scenario_values = scenario_result[column]
+
+            difference = scenario_values - baseline_values
+
+            comparison[column] = {
+                "baseline_final": float(baseline_values[-1]),
+                "scenario_final": float(scenario_values[-1]),
+                "final_difference": float(difference[-1]),
+                "maximum_absolute_difference": float(
+                    max(abs(difference))
+                ),
+            }
+
+        return comparison
+
+
+        
+    def get_status(self):
+        return self.status
+    
+    def run_baseline(
         self,
-        name: str,
-        scenario_state: Any,
+        start_day: float = 0,
+        end_day: float = 120,
+        points: int = 1201,
     ):
         """
-        Store a simulated scenario state.
+        Run the baseline Röblitz HPO simulation.
+
+        At this stage, the simulation uses the published model's
+        baseline parameterization. Patient observations remain
+        separate and are not directly substituted into kinetic
+        parameters without a validated mapping.
         """
 
-        self.state.scenarios[name] = (
-            scenario_state
+        simulation = run_baseline_simulation(
+            patient_id=self.patient.patient_id,
+            start_day=start_day,
+            end_day=end_day,
+            points=points,
         )
 
-    # ---------------------------------------------------------
-    # Twin summary
-    # ---------------------------------------------------------
+        self.state.baseline = simulation
+        self.status = "baseline_ready"
+
+        return simulation
+
+    def attach_ml_assessment(self, assessment):
+        """
+        Attach the ML-based PCOS assessment to the twin.
+        """
+
+        self.ml_assessment = assessment
+        self.status = "ml_assessed"
+
+    def add_scenario(self, name: str, simulation: Any):
+        """
+        Store a what-if simulation result.
+        """
+
+        self.state.scenarios[name] = simulation
 
     def summary(self):
         """
-        Return a compact representation of the twin.
+        Return a compact representation of the current twin state.
         """
 
         return {
             "patient_id": self.patient.patient_id,
-
-            "observations": {
-                "FSH": self.patient.fsh,
-                "LH": self.patient.lh,
-                "AMH": self.patient.amh,
-                "Progesterone": (
-                    self.patient.progesterone
-                ),
-                "Follicle count": (
-                    self.patient.total_follicle_count
-                ),
-                "Mean follicle size": (
-                    self.patient.mean_follicle_size
-                ),
-                "Endometrium": (
-                    self.patient.endometrium
-                ),
-            },
-
-            "hpo_model_attached": (
-                self.hpo_model is not None
-            ),
-
-            "baseline_available": (
-                self.state.baseline is not None
-            ),
-
-            "scenario_count": len(
-                self.state.scenarios
-            ),
+            "status": self.status,
+            "baseline_available": self.state.baseline is not None,
+            "scenario_count": len(self.state.scenarios),
+            "ml_assessment_available": self.ml_assessment is not None,
         }
+    
+    def run_scenario(
+            self,
+            name: str,
+            parameter_changes: dict[str, float],
+            start_day: float = 0,
+            end_day: float = 120,
+            points: int = 1201,
+        ):
+            """
+            Run and store a patient-twin what-if scenario.
+            """
+
+            scenario = self.scenario_simulator.run(
+                name=name,
+                parameter_changes=parameter_changes,
+                start_day=start_day,
+                end_day=end_day,
+                points=points,
+            )
+
+            self.state.scenarios[name] = scenario
+            self.status = "scenario_ready"
+
+            return scenario
