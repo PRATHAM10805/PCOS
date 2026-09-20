@@ -1,1 +1,1 @@
-# OvaTwin source package
+"""OvaTwin source package."""
