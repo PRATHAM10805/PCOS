@@ -102,3 +102,5 @@ htmlcov/
 *.key
 secrets.json
 credentials.json
+# HPO / BioModels files
+models/HPO/*.omex
