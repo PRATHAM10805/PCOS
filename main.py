@@ -1,21 +1,21 @@
 import joblib
 
-from src.model_comparison import compare_models
+from src.ML.model_comparison import compare_models
 
-from src.data_loader import (
+from src.ML.data_loader import (
     load_data,
     split_features_target
 )
 
-from src.preprocessing import prepare_data
+from src.ML.preprocessing import prepare_data
 
-from src.feature_selection import select_features
+from src.ML.feature_selection import select_features
 
-from src.evaluate import evaluate_model
+from src.ML.evaluate import evaluate_model
 
-from src.explain import explain_model
+from src.ML.explain import explain_model
 
-from src.config import MODEL_DIR, MODEL_PATH
+from src.ML.config import MODEL_DIR, MODEL_PATH
 
 
 def main():
