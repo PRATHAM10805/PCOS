@@ -1,33 +1,51 @@
-from src.HPO.parameters import HPOParameters
+from dataclasses import dataclass, field
+
 from src.HPO.patient_values import HPOPatientValues
 
 
-def create_mapping(
-    patient: HPOPatientValues,
-):
+@dataclass
+class PatientTwinMapping:
     """
-    Prepare a patient's observations for future
-    HPO-model calibration.
+    Patient-specific observations used by the digital twin.
 
-    No unsupported physiological parameter conversion
-    is performed.
+    These values are observations from the clinical dataset.
+    They are kept separate from the fixed kinetic parameters
+    of the Röblitz HPO model.
     """
 
-    parameters = HPOParameters()
+    patient_id: int
 
-    return {
-        "patient_id": patient.patient_id,
+    hormones: dict[str, float | None] = field(default_factory=dict)
+    follicular: dict[str, float | None] = field(default_factory=dict)
+    uterine: dict[str, float | None] = field(default_factory=dict)
+    cycle: dict[str, float | None] = field(default_factory=dict)
+    anthropometric: dict[str, float | None] = field(default_factory=dict)
 
-        "observations": {
+
+def create_mapping(patient: HPOPatientValues) -> PatientTwinMapping:
+    """
+    Convert clinical/HPO observations into the patient-specific
+    representation used by the digital twin.
+
+    Important:
+    These observations are NOT automatically written into
+    Röblitz kinetic parameters.
+    """
+
+    return PatientTwinMapping(
+        patient_id=patient.patient_id,
+
+        hormones={
             "FSH": patient.fsh,
             "LH": patient.lh,
             "AMH": patient.amh,
             "Progesterone": patient.progesterone,
             "Prolactin": patient.prolactin,
             "TSH": patient.tsh,
+            "FSH_LH_ratio": patient.fsh_lh_ratio,
         },
 
-        "follicular_observations": {
+        follicular={
             "left_count": patient.follicle_count_left,
             "right_count": patient.follicle_count_right,
             "total_count": patient.total_follicle_count,
@@ -36,18 +54,19 @@ def create_mapping(
             "mean_size": patient.mean_follicle_size,
         },
 
-        "uterine_observations": {
+        uterine={
             "endometrium": patient.endometrium,
         },
 
-        "cycle_observations": {
-            "cycle_regular": patient.cycle_regular,
-            "cycle_length_encoded": (
-                patient.cycle_length_encoded
-            ),
+        cycle={
+            "regular": patient.cycle_regular,
+            "length_encoded": patient.cycle_length_encoded,
         },
 
-        "parameters": parameters,
-
-        "status": "awaiting_hpo_model",
-    }
+        anthropometric={
+            "age": patient.age,
+            "weight": patient.weight,
+            "height": patient.height,
+            "bmi": patient.bmi,
+        },
+    )
